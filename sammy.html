@@ -220,7 +220,8 @@
                 <ul>
                     <li><strong>Name</strong> <span>Sammy</span></li>
                     <li><strong>Art</strong> <span>Goldhamster</span></li>
-                    <li><strong>Alter</strong> <span>5 Monate</span></li>
+                    <li><strong>Alter</strong> <span id="sammy-age">Lädt...</span></li>
+
                     <li><strong>Geschlecht</strong> <span>Männlich ♂️</span></li>
                 </ul>
             </div>
@@ -246,6 +247,63 @@
     <footer>
         <p>Made with ❤️ for Sammy & Selina</p>
     </footer>
+<script>
+    function calculateAge() {
+        // Sammys Geburtsdatum: 17. November 2025
+        const birthDate = new Date('2025-11-17');
+        const now = new Date();
 
+        let years = now.getFullYear() - birthDate.getFullYear();
+        let months = now.getMonth() - birthDate.getMonth();
+        let days = now.getDate() - birthDate.getDate();
+
+        // Korrektur, wenn der aktuelle Monatstag kleiner als der Geburtstagstag ist
+        if (days < 0) {
+            months -= 1;
+            // Tage im Vormonat ermitteln
+            const lastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+            days += lastMonth.getDate();
+        }
+
+        // Korrektur, wenn der aktuelle Monat vor dem Geburtsmonat liegt
+        if (months < 0) {
+            years -= 1;
+            months += 12;
+        }
+
+        // Text zusammenbauen
+        let ageText = "";
+        
+        if (years > 0) {
+            ageText += years + (years === 1 ? " Jahr " : " Jahre ");
+        }
+        
+        if (months > 0) {
+            ageText += months + (months === 1 ? " Monat " : " Monate ");
+        }
+
+        // Wochen berechnen
+        const weeks = Math.floor(days / 7);
+        const remainingDays = days % 7;
+
+        if (weeks > 0) {
+            ageText += weeks + (weeks === 1 ? " Woche " : " Wochen ");
+        }
+        
+        if (remainingDays > 0) {
+            ageText += "und " + remainingDays + (remainingDays === 1 ? " Tag" : " Tage");
+        }
+
+        // Falls er genau heute Geburtstag hat (0 Monate, 0 Wochen, 0 Tage)
+        if (ageText === "") {
+            ageText = "Gerade erst eingezogen! 🐹";
+        }
+
+        document.getElementById('sammy-age').innerText = "ca. " + ageText;
+    }
+
+    // Funktion beim Laden ausführen
+    calculateAge();
+</script>
 </body>
 </html>
