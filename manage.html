@@ -64,7 +64,8 @@
             font-weight: 600;
         }
 
-        input[type="password"] {
+        input[type="password"],
+        input[type="text"] {
             width: 100%;
             padding: 12px;
             border: 2px solid #eee;
@@ -74,7 +75,8 @@
             transition: border-color 0.2s ease;
         }
 
-        input[type="password"]:focus {
+        input[type="password"]:focus,
+        input[type="text"]:focus {
             border-color: var(--primary-color);
         }
 
@@ -116,6 +118,11 @@
             color: white;
         }
 
+        .btn-secondary {
+            background: #ccc;
+            color: #333;
+        }
+
         .file-list {
             display: flex;
             flex-direction: column;
@@ -132,6 +139,7 @@
             border-radius: 14px;
             background: #fafafa;
             gap: 15px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
         .file-info {
@@ -182,6 +190,57 @@
             background: rgba(231, 76, 60, 0.15);
             color: var(--danger-color);
         }
+
+        .custom-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+            backdrop-filter: blur(3px);
+        }
+
+        .custom-modal-overlay.active {
+            display: flex;
+        }
+
+        .custom-modal {
+            background: white;
+            padding: 25px;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .custom-modal h3 {
+            margin-bottom: 15px;
+            color: var(--secondary-color);
+        }
+
+        .custom-modal p {
+            margin-bottom: 20px;
+            font-size: 0.95em;
+            word-break: break-all;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .modal-buttons .btn {
+            flex: 1;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -201,6 +260,20 @@
         <div class="file-list" id="file-list"></div>
     </div>
 
+    <div class="custom-modal-overlay" id="custom-modal">
+        <div class="custom-modal">
+            <h3 id="modal-title">Bestätigen</h3>
+            <p id="modal-text"></p>
+            <div class="form-group" id="modal-input-group" style="display: none;">
+                <input type="text" id="modal-input">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="modal-cancel">Abbrechen</button>
+                <button class="btn btn-primary" id="modal-confirm">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function() {
             const owner = 'planeteriumprovider';
@@ -211,6 +284,16 @@
             const loadBtn = document.getElementById('load-btn');
             const fileList = document.getElementById('file-list');
             const status = document.getElementById('status');
+
+            const modal = document.getElementById('custom-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalText = document.getElementById('modal-text');
+            const modalInputGroup = document.getElementById('modal-input-group');
+            const modalInput = document.getElementById('modal-input');
+            const modalCancel = document.getElementById('modal-cancel');
+            const modalConfirm = document.getElementById('modal-confirm');
+
+            let onConfirmCallback = null;
 
             const savedToken = localStorage.getItem('sammy_token');
             if (savedToken) {
@@ -227,6 +310,33 @@
                 status.style.display = 'block';
             }
 
+            function openModal(title, text, isInput, defaultValue, callback) {
+                modalTitle.innerText = title;
+                modalText.innerText = text;
+                if (isInput) {
+                    modalInputGroup.style.display = 'block';
+                    modalInput.value = defaultValue || '';
+                } else {
+                    modalInputGroup.style.display = 'none';
+                }
+                onConfirmCallback = callback;
+                modal.classList.add('active');
+            }
+
+            function closeModal() {
+                modal.classList.remove('active');
+                onConfirmCallback = null;
+            }
+
+            modalCancel.addEventListener('click', closeModal);
+            modalConfirm.addEventListener('click', () => {
+                if (onConfirmCallback) {
+                    const val = modalInputGroup.style.display === 'block' ? modalInput.value.trim() : true;
+                    onConfirmCallback(val);
+                }
+                closeModal();
+            });
+
             async function loadImages() {
                 const token = tokenInput.value.trim();
                 if (!token) {
@@ -238,7 +348,7 @@
                 fileList.innerHTML = '';
 
                 try {
-                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}`, {
+                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(folder)}`, {
                         headers: { 
                             'Authorization': `token ${token}`,
                             'Accept': 'application/vnd.github.v3+json'
@@ -247,7 +357,7 @@
 
                     if (!res.ok) {
                         const errData = await res.json().catch(() => ({}));
-                        throw new Error(errData.message || 'Fehler beim Laden. Token gültig?');
+                        throw new Error(errData.message || 'Fehler beim Laden.');
                     }
 
                     const files = await res.json();
@@ -264,6 +374,7 @@
                     images.forEach(file => {
                         const item = document.createElement('div');
                         item.className = 'file-item';
+                        item.id = 'file-row-' + btoa(file.name).replace(/=/g, '');
 
                         const fileInfo = document.createElement('div');
                         fileInfo.className = 'file-info';
@@ -307,105 +418,114 @@
                 }
             }
 
-            async function deleteFile(fileName, sha) {
+            function deleteFile(fileName, sha) {
                 const token = tokenInput.value.trim();
-                if (!confirm(`Möchtest du "${fileName}" wirklich löschen?`)) return;
 
-                showStatus(`Lösche ${fileName}...`, 'success');
+                openModal('Bild löschen', `Möchtest du "${fileName}" wirklich unwiderruflich löschen?`, false, null, async (confirmed) => {
+                    if (!confirmed) return;
 
-                try {
-                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${fileName}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/vnd.github.v3+json'
-                        },
-                        body: JSON.stringify({
-                            message: `Delete ${fileName}`,
-                            sha: sha
-                        })
-                    });
+                    showStatus(`Lösche ${fileName}...`, 'success');
 
-                    if (res.ok) {
-                        showStatus(`"${fileName}" erfolgreich gelöscht!`, 'success');
-                        loadImages();
-                    } else {
-                        const errData = await res.json().catch(() => ({}));
-                        showStatus(`Löschen fehlgeschlagen: ${errData.message || res.statusText}`, 'error');
+                    try {
+                        const filePath = `${folder}/${fileName}`;
+                        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/vnd.github.v3+json'
+                            },
+                            body: JSON.stringify({
+                                message: `Delete ${fileName}`,
+                                sha: sha
+                            })
+                        });
+
+                        if (res.ok) {
+                            showStatus(`"${fileName}" gelöscht!`, 'success');
+                            const row = document.getElementById('file-row-' + btoa(fileName).replace(/=/g, ''));
+                            if (row) {
+                                row.style.opacity = '0';
+                                row.style.transform = 'scale(0.9)';
+                                setTimeout(() => row.remove(), 300);
+                            }
+                        } else {
+                            const errData = await res.json().catch(() => ({}));
+                            showStatus(`Löschen fehlgeschlagen: ${errData.message || res.statusText}`, 'error');
+                        }
+                    } catch (err) {
+                        showStatus('Fehler beim Löschen!', 'error');
                     }
-                } catch (err) {
-                    showStatus('Fehler beim Löschen!', 'error');
-                }
+                });
             }
 
-            async function renameFile(oldName, sha) {
+            function renameFile(oldName, sha) {
                 const token = tokenInput.value.trim();
-                const newName = prompt('Neuer Dateiname:', oldName);
 
-                if (!newName || newName === oldName) return;
+                openModal('Bild umbenennen', 'Gib den neuen Dateinamen ein:', true, oldName, async (newName) => {
+                    if (!newName || newName === oldName) return;
 
-                showStatus(`Lade Datei-Inhalt für ${oldName}...`, 'success');
+                    showStatus(`Umbenennen gestartet...`, 'success');
 
-                try {
-                    const getRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${oldName}`, {
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Accept': 'application/vnd.github.v3+json'
+                    try {
+                        const oldPath = `${folder}/${oldName}`;
+                        const getRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${oldPath.split('/').map(encodeURIComponent).join('/')}`, {
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Accept': 'application/vnd.github.v3+json'
+                            }
+                        });
+
+                        if (!getRes.ok) throw new Error('Konnte Datei-Inhalt nicht laden.');
+
+                        const fileData = await getRes.json();
+                        const base64Content = fileData.content.replace(/\n/g, '');
+
+                        const newPath = `${folder}/${newName}`;
+                        const createRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${newPath.split('/').map(encodeURIComponent).join('/')}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/vnd.github.v3+json'
+                            },
+                            body: JSON.stringify({
+                                message: `Rename ${oldName} to ${newName}`,
+                                content: base64Content
+                            })
+                        });
+
+                        if (!createRes.ok) {
+                            const errData = await createRes.json().catch(() => ({}));
+                            throw new Error(`Erstellen fehlgeschlagen: ${errData.message || createRes.statusText}`);
                         }
-                    });
 
-                    if (!getRes.ok) throw new Error('Konnte Datei-Inhalt nicht von GitHub lesen.');
+                        await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${oldPath.split('/').map(encodeURIComponent).join('/')}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/vnd.github.v3+json'
+                            },
+                            body: JSON.stringify({
+                                message: `Remove old file ${oldName}`,
+                                sha: sha
+                            })
+                        });
 
-                    const fileData = await getRes.json();
-                    const base64Content = fileData.content.replace(/\n/g, '');
+                        showStatus(`In "${newName}" umbenannt!`, 'success');
 
-                    showStatus(`Erstelle ${newName}...`, 'success');
+                        const row = document.getElementById('file-row-' + btoa(oldName).replace(/=/g, ''));
+                        if (row) {
+                            row.id = 'file-row-' + btoa(newName).replace(/=/g, '');
+                            const nameSpan = row.querySelector('.file-name');
+                            if (nameSpan) nameSpan.innerText = newName;
+                        }
 
-                    const createRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${newName}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/vnd.github.v3+json'
-                        },
-                        body: JSON.stringify({
-                            message: `Rename ${oldName} to ${newName}`,
-                            content: base64Content
-                        })
-                    });
-
-                    if (!createRes.ok) {
-                        const errData = await createRes.json().catch(() => ({}));
-                        throw new Error(`Erstellen fehlgeschlagen: ${errData.message || createRes.statusText}`);
+                    } catch (err) {
+                        showStatus(err.message, 'error');
                     }
-
-                    showStatus(`Entferne alte Datei ${oldName}...`, 'success');
-
-                    const deleteRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${oldName}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/vnd.github.v3+json'
-                        },
-                        body: JSON.stringify({
-                            message: `Remove old file ${oldName}`,
-                            sha: sha
-                        })
-                    });
-
-                    if (!deleteRes.ok) {
-                        const errData = await deleteRes.json().catch(() => ({}));
-                        throw new Error(`Alte Datei löschen fehlgeschlagen: ${errData.message || deleteRes.statusText}`);
-                    }
-
-                    showStatus(`Erfolgreich umbenannt in "${newName}"!`, 'success');
-                    loadImages();
-
-                } catch (err) {
-                    showStatus(err.message, 'error');
-                }
+                });
             }
 
             loadBtn.addEventListener('click', loadImages);
