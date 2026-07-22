@@ -65,8 +65,7 @@
             font-weight: 600;
         }
 
-        input[type="password"],
-        input[type="text"] {
+        input[type="password"] {
             width: 100%;
             padding: 12px;
             border: 2px solid #eee;
@@ -76,8 +75,7 @@
             transition: border-color 0.2s ease;
         }
 
-        input[type="password"]:focus,
-        input[type="text"]:focus {
+        input[type="password"]:focus {
             border-color: var(--primary-color);
         }
 
@@ -142,7 +140,7 @@
             display: flex;
             justify-content: space-between;
             padding: 6px 0;
-            border-bottom: 1px border-bottom: 1px dashed #eee;
+            border-bottom: 1px dashed #eee;
         }
 
         .status-msg {
@@ -173,8 +171,8 @@
         <h1><i class="fas fa-user-shield"></i> Sammy Admin</h1>
 
         <div class="form-group">
-            <label for="gh-token">GitHub Access Token</label>
-            <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
+            <label for="gh-token">GitHub Token</label>
+            <input type="password" id="gh-token" placeholder="Token hier eintragen">
         </div>
 
         <div class="file-dropzone" id="dropzone">
@@ -205,13 +203,13 @@
 
             let selectedFiles = [];
 
-            const savedToken = localStorage.getItem('sammy_gh_token');
+            const savedToken = localStorage.getItem('sammy_token');
             if (savedToken) {
                 tokenInput.value = savedToken;
             }
 
             tokenInput.addEventListener('input', () => {
-                localStorage.setItem('sammy_gh_token', tokenInput.value.trim());
+                localStorage.setItem('sammy_token', tokenInput.value.trim());
                 checkReady();
             });
 
@@ -296,7 +294,7 @@
                                 'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({
-                                message: `Upload ${file.name} via Admin Panel`,
+                                message: `Upload ${file.name}`,
                                 content: content
                             })
                         });
@@ -319,7 +317,7 @@
                     fileInput.value = '';
                 } else {
                     status.className = 'status-msg error';
-                    status.innerText = `${successCount} hochgeladen, ${failCount} fehlgeschlagen. Token überprüfen!`;
+                    status.innerText = `${successCount} hochgeladen, ${failCount} fehlgeschlagen. Token prüfen!`;
                 }
 
                 checkReady();
