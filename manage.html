@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sammy Admin - Galerie Verwalten</title>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #f39c12;
+            --secondary-color: #e67e22;
+            --bg-color: #fdfcf5;
+            --text-color: #4a3c28;
+            --card-bg: #ffffff;
+            --accent-color: #2ecc71;
+            --danger-color: #e74c3c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .admin-card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 24px;
+            max-width: 700px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            border: 1px solid rgba(243, 156, 18, 0.2);
+        }
+
+        h1 {
+            color: var(--secondary-color);
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+
+        input[type="password"]:focus {
+            border-color: var(--primary-color);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 10px;
+            font-family: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            width: 100%;
+            padding: 12px;
+            font-size: 1em;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-rename {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            border: 1px solid #eee;
+            border-radius: 14px;
+            background: #fafafa;
+            gap: 15px;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            overflow: hidden;
+        }
+
+        .file-thumb {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #eee;
+            flex-shrink: 0;
+        }
+
+        .file-name {
+            font-weight: 600;
+            word-break: break-all;
+            font-size: 0.95em;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .status-msg {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            text-align: center;
+            display: none;
+        }
+
+        .status-msg.success {
+            display: block;
+            background: rgba(46, 204, 113, 0.15);
+            color: #27ae60;
+        }
+
+        .status-msg.error {
+            display: block;
+            background: rgba(231, 76, 60, 0.15);
+            color: var(--danger-color);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="admin-card">
+        <h1><i class="fas fa-folder-open"></i> Sammy Galerie Verwalten</h1>
+
+        <div class="form-group">
+            <label for="gh-token">GitHub Token</label>
+            <input type="password" id="gh-token" placeholder="Token hier eintragen">
+        </div>
+
+        <button class="btn btn-primary" id="load-btn"><i class="fas fa-sync"></i> Bilder laden</button>
+
+        <div class="status-msg" id="status"></div>
+
+        <div class="file-list" id="file-list"></div>
+    </div>
+
+    <script>
+        (function() {
+            const owner = 'planeteriumprovider';
+            const repo = 'Sammy';
+            const folder = 'Sammy_Assets';
+
+            const tokenInput = document.getElementById('gh-token');
+            const loadBtn = document.getElementById('load-btn');
+            const fileList = document.getElementById('file-list');
+            const status = document.getElementById('status');
+
+            const savedToken = localStorage.getItem('sammy_token');
+            if (savedToken) {
+                tokenInput.value = savedToken;
+            }
+
+            tokenInput.addEventListener('input', () => {
+                localStorage.setItem('sammy_token', tokenInput.value.trim());
+            });
+
+            function showStatus(text, type) {
+                status.className = 'status-msg ' + type;
+                status.innerText = text;
+                status.style.display = 'block';
+            }
+
+            async function loadImages() {
+                const token = tokenInput.value.trim();
+                if (!token) {
+                    showStatus('Bitte erst den GitHub Token eintragen!', 'error');
+                    return;
+                }
+
+                showStatus('Lade Bilder...', 'success');
+                fileList.innerHTML = '';
+
+                try {
+                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}`, {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+
+                    if (!res.ok) throw new Error('Fehler beim Laden. Token gültig?');
+
+                    const files = await res.json();
+                    const validExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+                    const images = files.filter(f => f.type === 'file' && validExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+
+                    status.style.display = 'none';
+
+                    if (images.length === 0) {
+                        showStatus('Keine Bilder im Ordner gefunden.', 'error');
+                        return;
+                    }
+
+                    images.forEach(file => {
+                        const item = document.createElement('div');
+                        item.className = 'file-item';
+
+                        item.innerHTML = `
+                            <div class="file-info">
+                                <img src="${file.download_url}" class="file-thumb" alt="">
+                                <span class="file-name">${file.name}</span>
+                            </div>
+                            <div class="file-actions">
+                                <button class="btn btn-rename" onclick="renameFile('${file.name}', '${file.sha}', '${file.download_url}')"><i class="fas fa-pen"></i></button>
+                                <button class="btn btn-danger" onclick="deleteFile('${file.name}', '${file.sha}')"><i class="fas fa-trash"></i></button>
+                            </div>
+                        `;
+
+                        fileList.appendChild(item);
+                    });
+
+                } catch (err) {
+                    showStatus(err.message, 'error');
+                }
+            }
+
+            window.deleteFile = async function(fileName, sha) {
+                const token = tokenInput.value.trim();
+                if (!confirm(`Möchtest du "${fileName}" wirklich löschen?`)) return;
+
+                showStatus(`Lösche ${fileName}...`, 'success');
+
+                try {
+                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${fileName}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Delete ${fileName}`,
+                            sha: sha
+                        })
+                    });
+
+                    if (res.ok) {
+                        showStatus(`"${fileName}" gelöscht!`, 'success');
+                        loadImages();
+                    } else {
+                        showStatus('Löschen fehlgeschlagen!', 'error');
+                    }
+                } catch (err) {
+                    showStatus('Fehler beim Löschen!', 'error');
+                }
+            };
+
+            window.renameFile = async function(oldName, sha, downloadUrl) {
+                const token = tokenInput.value.trim();
+                const newName = prompt('Neuer Dateiname:', oldName);
+
+                if (!newName || newName === oldName) return;
+
+                showStatus(`Benenne ${oldName} um...`, 'success');
+
+                try {
+                    const imgRes = await fetch(downloadUrl);
+                    const blob = await imgRes.blob();
+                    
+                    const base64Content = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(blob);
+                    });
+
+                    const createRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${newName}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Rename ${oldName} to ${newName}`,
+                            content: base64Content
+                        })
+                    });
+
+                    if (!createRes.ok) throw new Error('Erstellen der neuen Datei fehlgeschlagen!');
+
+                    await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${oldName}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Remove old file ${oldName}`,
+                            sha: sha
+                        })
+                    });
+
+                    showStatus(`Erfolgreich umbenannt in "${newName}"!`, 'success');
+                    loadImages();
+
+                } catch (err) {
+                    showStatus('Umbenennen fehlgeschlagen!', 'error');
+                }
+            };
+
+            loadBtn.addEventListener('click', loadImages);
+
+            if (savedToken) {
+                loadImages();
+            }
+        })();
+    </script>
+</body>
+</html>
