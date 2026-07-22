@@ -239,10 +239,16 @@
 
                 try {
                     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}`, {
-                        headers: { 'Authorization': `token ${token}` }
+                        headers: { 
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
                     });
 
-                    if (!res.ok) throw new Error('Fehler beim Laden. Token gültig?');
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.message || 'Fehler beim Laden. Token gültig?');
+                    }
 
                     const files = await res.json();
                     const validExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
@@ -259,16 +265,39 @@
                         const item = document.createElement('div');
                         item.className = 'file-item';
 
-                        item.innerHTML = `
-                            <div class="file-info">
-                                <img src="${file.download_url}" class="file-thumb" alt="">
-                                <span class="file-name">${file.name}</span>
-                            </div>
-                            <div class="file-actions">
-                                <button class="btn btn-rename" onclick="renameFile('${file.name}', '${file.sha}', '${file.download_url}')"><i class="fas fa-pen"></i></button>
-                                <button class="btn btn-danger" onclick="deleteFile('${file.name}', '${file.sha}')"><i class="fas fa-trash"></i></button>
-                            </div>
-                        `;
+                        const fileInfo = document.createElement('div');
+                        fileInfo.className = 'file-info';
+
+                        const img = document.createElement('img');
+                        img.className = 'file-thumb';
+                        img.src = file.download_url;
+                        img.alt = '';
+
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'file-name';
+                        nameSpan.innerText = file.name;
+
+                        fileInfo.appendChild(img);
+                        fileInfo.appendChild(nameSpan);
+
+                        const fileActions = document.createElement('div');
+                        fileActions.className = 'file-actions';
+
+                        const renameBtn = document.createElement('button');
+                        renameBtn.className = 'btn btn-rename';
+                        renameBtn.innerHTML = '<i class="fas fa-pen"></i>';
+                        renameBtn.addEventListener('click', () => renameFile(file.name, file.sha));
+
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'btn btn-danger';
+                        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                        deleteBtn.addEventListener('click', () => deleteFile(file.name, file.sha));
+
+                        fileActions.appendChild(renameBtn);
+                        fileActions.appendChild(deleteBtn);
+
+                        item.appendChild(fileInfo);
+                        item.appendChild(fileActions);
 
                         fileList.appendChild(item);
                     });
@@ -278,7 +307,7 @@
                 }
             }
 
-            window.deleteFile = async function(fileName, sha) {
+            async function deleteFile(fileName, sha) {
                 const token = tokenInput.value.trim();
                 if (!confirm(`Möchtest du "${fileName}" wirklich löschen?`)) return;
 
@@ -289,7 +318,8 @@
                         method: 'DELETE',
                         headers: {
                             'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/vnd.github.v3+json'
                         },
                         body: JSON.stringify({
                             message: `Delete ${fileName}`,
@@ -298,39 +328,46 @@
                     });
 
                     if (res.ok) {
-                        showStatus(`"${fileName}" gelöscht!`, 'success');
+                        showStatus(`"${fileName}" erfolgreich gelöscht!`, 'success');
                         loadImages();
                     } else {
-                        showStatus('Löschen fehlgeschlagen!', 'error');
+                        const errData = await res.json().catch(() => ({}));
+                        showStatus(`Löschen fehlgeschlagen: ${errData.message || res.statusText}`, 'error');
                     }
                 } catch (err) {
                     showStatus('Fehler beim Löschen!', 'error');
                 }
-            };
+            }
 
-            window.renameFile = async function(oldName, sha, downloadUrl) {
+            async function renameFile(oldName, sha) {
                 const token = tokenInput.value.trim();
                 const newName = prompt('Neuer Dateiname:', oldName);
 
                 if (!newName || newName === oldName) return;
 
-                showStatus(`Benenne ${oldName} um...`, 'success');
+                showStatus(`Lade Datei-Inhalt für ${oldName}...`, 'success');
 
                 try {
-                    const imgRes = await fetch(downloadUrl);
-                    const blob = await imgRes.blob();
-                    
-                    const base64Content = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                        reader.readAsDataURL(blob);
+                    const getRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${oldName}`, {
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
                     });
+
+                    if (!getRes.ok) throw new Error('Konnte Datei-Inhalt nicht von GitHub lesen.');
+
+                    const fileData = await getRes.json();
+                    const base64Content = fileData.content.replace(/\n/g, '');
+
+                    showStatus(`Erstelle ${newName}...`, 'success');
 
                     const createRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${newName}`, {
                         method: 'PUT',
                         headers: {
                             'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/vnd.github.v3+json'
                         },
                         body: JSON.stringify({
                             message: `Rename ${oldName} to ${newName}`,
@@ -338,13 +375,19 @@
                         })
                     });
 
-                    if (!createRes.ok) throw new Error('Erstellen der neuen Datei fehlgeschlagen!');
+                    if (!createRes.ok) {
+                        const errData = await createRes.json().catch(() => ({}));
+                        throw new Error(`Erstellen fehlgeschlagen: ${errData.message || createRes.statusText}`);
+                    }
 
-                    await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${oldName}`, {
+                    showStatus(`Entferne alte Datei ${oldName}...`, 'success');
+
+                    const deleteRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${folder}/${oldName}`, {
                         method: 'DELETE',
                         headers: {
                             'Authorization': `token ${token}`,
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/vnd.github.v3+json'
                         },
                         body: JSON.stringify({
                             message: `Remove old file ${oldName}`,
@@ -352,13 +395,18 @@
                         })
                     });
 
+                    if (!deleteRes.ok) {
+                        const errData = await deleteRes.json().catch(() => ({}));
+                        throw new Error(`Alte Datei löschen fehlgeschlagen: ${errData.message || deleteRes.statusText}`);
+                    }
+
                     showStatus(`Erfolgreich umbenannt in "${newName}"!`, 'success');
                     loadImages();
 
                 } catch (err) {
-                    showStatus('Umbenennen fehlgeschlagen!', 'error');
+                    showStatus(err.message, 'error');
                 }
-            };
+            }
 
             loadBtn.addEventListener('click', loadImages);
 
